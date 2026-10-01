@@ -1,0 +1,215 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis, vector]
+}
+
+model users {
+  id               Int       @id @default(autoincrement())
+  nome             String
+  email            String    @unique
+  password         String // hash bcrypt — nunca texto plano
+  role             String    @default("usuario")
+  is_active        Boolean   @default(true)
+  is_first_access  Boolean   @default(true)
+  accept_terms_at  DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  eventos EventoUso[]
+
+  @@map("users")
+}
+
+// Métricas de uso: uma linha por ação relevante, escrita logo após a ação já ter tido sucesso
+// no handler (nunca antes). user_id opcional pra dar pra logar tentativa de login com e-mail
+// que nem existe (sem usuário nenhum pra apontar o FK).
+model EventoUso {
+  id         Int      @id @default(autoincrement())
+  user_id    Int?
+  user       users?   @relation(fields: [user_id], references: [id])
+  acao       String // "login" | "logout" | "erro" | "setor_selecionado" | "comparacao_criada" | "pois_visualizados" | "relatorio_exportado" (futuro)
+  metadata   Json?
+  created_at DateTime @default(now())
+
+  @@index([user_id, acao])
+  @@index([created_at])
+  @@map("eventos_uso")
+}
+
+model SetorCensitario {
+  cd_setor              String
+  censo_date            DateTime @db.Date
+  cd_municipio          String?
+  nm_municipio          String?
+  uf                    String?
+  regiao                String?
+  situacao              String?  // urbano | rural
+  area_km2              Int      // km² × 100
+  populacao             Int?
+  renda_media           Int?     // R$ em centavos
+  renda_mediana         Int?     // R$ em centavos
+  densidade_hab_km2     Int?     // hab/km² × 100
+  tamanho_medio_familia Int?     // pessoas × 100
+  desvio_padrao_renda   Int?     // R$ em centavos
+  coef_variacao_renda   Int?     // proporção × 10000
+  domicilios_ocupados      Int? // V0007
+  domicilios_uso_ocasional Int? // V0008
+  domicilios_vagos         Int? // V0009
+  geom                  Unsupported("geometry(MultiPolygon, 4326)")
+  perfil                Unsupported("vector(6)")? // market matching
+
+  @@id([cd_setor, censo_date])
+  @@index([geom], map: "setores_censitarios_geom_gist_idx", type: Gist)
+  @@map("setores_censitarios")
+}
+
+model SetorDemografia {
+  cd_setor                  String
+  censo_date                DateTime @db.Date
+
+  populacao_masculina       Int?
+  populacao_feminina        Int?
+
+  idade_0_4                 Int?
+  idade_5_9                 Int?
+  idade_10_14                Int?
+  idade_15_19                Int?
+  idade_20_24                Int?
+  idade_25_29                Int?
+  idade_30_39                Int?
+  idade_40_49                Int?
+  idade_50_59                Int?
+  idade_60_69                Int?
+  idade_70_mais               Int?
+
+  populacao_branca           Int?
+  populacao_preta            Int?
+  populacao_amarela          Int?
+  populacao_parda            Int?
+  populacao_indigena         Int?
+
+  alfabetizados_15_mais      Int?
+  nao_alfabetizados_15_mais  Int?
+
+  @@id([cd_setor, censo_date])
+  @@map("setores_demografia")
+}
+
+model SetorVulnerabilidade {
+  cd_setor                     String
+  censo_date                   DateTime @db.Date
+
+  domicilios_agua_rede         Int?
+  domicilios_esgoto_rede       Int?
+  domicilios_lixo_coletado     Int?
+
+  domicilios_casa              Int?
+  domicilios_casa_condominio   Int?
+  domicilios_apartamento       Int?
+  domicilios_precario          Int?
+
+  domicilios_com_banheiro      Int?
+  domicilios_sem_banheiro      Int?
+
+  // Entorno urbano — nível de face de quadra (só setor urbano tem esse dado)
+  faces_total                  Int?
+  faces_com_pavimentacao       Int?
+  faces_com_bueiro             Int?
+  faces_com_iluminacao         Int?
+  faces_com_ponto_onibus       Int?
+  faces_com_via_bicicleta      Int?
+  faces_com_calcada            Int?
+  faces_com_obstaculo          Int?
+  faces_com_rampa              Int?
+  faces_sem_arvores            Int?
+
+  @@id([cd_setor, censo_date])
+  @@map("setores_vulnerabilidade")
+}
+
+// Fator de correção monetária (ex: IPCA) por mês de referência. Uma linha nova por mês —
+// nunca sobrescreve a anterior, pra preservar auditoria de qual fator valia em cada época.
+model IndiceCorrecaoMonetaria {
+  id              Int      @id @default(autoincrement())
+  indice          String // "IPCA" — aberto pra outro índice no futuro, sem remodelar
+  mes_referencia  DateTime @db.Date // sempre dia 1 do mês, ex: 2026-08-01
+  fator_acumulado Decimal  @db.Decimal(10, 6) // ex: 1.194770
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@unique([indice, mes_referencia])
+  @@map("indices_correcao_monetaria")
+}
+
+model Poi {
+  id           Int      @id @default(autoincrement())
+  categoria    String
+  subcategoria String
+  nome         String?
+  fonte        String
+  metadata     Json?
+  geom         Unsupported("geometry(Point, 4326)")
+  shape        Unsupported("geometry(MultiPolygon, 4326)")?
+
+  @@index([categoria, subcategoria])
+  @@index([geom], map: "pois_geom_gist_idx", type: Gist)
+  @@index([shape], map: "pois_shape_gist_idx", type: Gist)
+  @@map("pois")
+}
+
+model setores_censitarios_raw {
+  fid                        Int                      @id @default(autoincrement())
+  cd_setor                   String?                  @db.VarChar
+  situacao                   String?                  @db.VarChar
+  cd_sit                     String?                  @db.VarChar
+  cd_tipo                    String?                  @db.VarChar
+  area_km2                   Float?
+  cd_regiao                  String?                  @db.VarChar
+  nm_regiao                  String?                  @db.VarChar
+  cd_uf                      String?                  @db.VarChar
+  nm_uf                      String?                  @db.VarChar
+  cd_mun                     String?                  @db.VarChar
+  nm_mun                     String?                  @db.VarChar
+  cd_dist                    String?                  @db.VarChar
+  nm_dist                    String?                  @db.VarChar
+  cd_subdist                 String?                  @db.VarChar
+  nm_subdist                 String?                  @db.VarChar
+  cd_bairro                  String?                  @db.VarChar
+  nm_bairro                  String?                  @db.VarChar
+  cd_nu                      String?                  @db.VarChar
+  nm_nu                      String?                  @db.VarChar
+  cd_fcu                     String?                  @db.VarChar
+  nm_fcu                     String?                  @db.VarChar
+  cd_aglom                   String?                  @db.VarChar
+  nm_aglom                   String?                  @db.VarChar
+  cd_rgint                   String?                  @db.VarChar
+  nm_rgint                   String?                  @db.VarChar
+  cd_rgi                     String?                  @db.VarChar
+  nm_rgi                     String?                  @db.VarChar
+  cd_concurb                 String?                  @db.VarChar
+  nm_concurb                 String?                  @db.VarChar
+  qtd_domicilios_responsavel Float?
+  qtd_moradores              Float?
+  variancia_moradores        Float?
+  renda_media                Float?
+  variancia_renda            Float?
+  renda_mediana               Float?
+  densidade_hab_km2          Float?
+  tamanho_medio_familia      Float?
+  desvio_padrao_renda        Float?
+  coef_variacao_renda        Float?
+  geom                       Unsupported("geometry")?
+
+  @@index([geom], map: "setores_censitarios_raw_geom_geom_idx", type: Gist)
+}

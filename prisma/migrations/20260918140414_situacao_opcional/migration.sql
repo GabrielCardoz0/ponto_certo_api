@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "setores_censitarios" ALTER COLUMN "cd_municipio" DROP NOT NULL,
+ALTER COLUMN "nm_municipio" DROP NOT NULL,
+ALTER COLUMN "uf" DROP NOT NULL,
+ALTER COLUMN "regiao" DROP NOT NULL,
+ALTER COLUMN "situacao" DROP NOT NULL;
