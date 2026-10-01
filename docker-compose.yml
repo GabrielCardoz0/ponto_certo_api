@@ -1,5 +1,5 @@
 services:
-  ponto-certo-api:
+  api:  # nome tem que bater com o usado no nginx.conf ("api")
     build: .
     container_name: ponto-certo-api
     restart: unless-stopped
@@ -8,13 +8,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - traefik
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ponto_certo_api.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.ponto_certo_api.entrypoints=websecure"
-      - "traefik.http.routers.ponto_certo_api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ponto_certo_api.loadbalancer.server.port=3000"
+      - traefik  # mesma rede do front, sem labels de roteamento público
 
 networks:
   traefik:
