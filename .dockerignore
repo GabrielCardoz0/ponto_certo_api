@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.env
+.env.*
+generated
+old
+.agents
+.claude
+.windsurf
+skills-lock.json
+*.pmtiles
+*.gpkg

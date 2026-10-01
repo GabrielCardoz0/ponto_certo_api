@@ -1,0 +1,21 @@
+services:
+  ponto-certo-api:
+    build: .
+    container_name: ponto-certo-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ponto_certo_api.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.ponto_certo_api.entrypoints=websecure"
+      - "traefik.http.routers.ponto_certo_api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ponto_certo_api.loadbalancer.server.port=3000"
+
+networks:
+  traefik:
+    external: true
